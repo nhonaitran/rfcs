@@ -4,13 +4,14 @@ Improve synthetic departure and arrival accuracy for adhoc flights.
 
 # Motivation
 
-Recent policy to make adhoc flights visible on our flight tracking webpage has revealed an      
-issue that we have long been suspected.  There are recurring instances where we
-issue synthtic departure late and/or arrival early for many adhoc flights. This
-manifests as tracks beginning or ending several miles from the origin or 
-destination.
+Recent policy to make adhoc flights visible on our flight tracking webpage has
+revealed an issue that we have long been suspected.  There are recurring 
+instances where we observe synthtic departure issued late or syntheic arrival
+issued much early for many adhoc flights. This manifests as tracks beginning
+or ending several miles from the origin or destination.
 
-Prime examples of these problems are seen here, here, here, and here.  
+Prime examples of these problems are reported in [FT-5221](https://flightaware.atlassian.net/browse/FT-5221), 
+[FT-6081](https://flightaware.atlassian.net/browse/FT-6081), [FT-6236](https://flightaware.atlassian.net/browse/FT-6236), [FT-6297](https://flightaware.atlassian.net/browse/FT-6297), and [FT-6753](https://flightaware.atlassian.net/browse/FT-6753).  
 
 # Proposed Solutions
 
