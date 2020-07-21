@@ -6,7 +6,7 @@ Improve synthetic departure and arrival accuracy for adhoc flights.
 
 Recent policy to make adhoc flights visible on our flight tracking webpage has
 revealed an issue that we have long suspected.  There are recurring 
-instances where we observe synthtic departure issued late or syntheic arrival
+instances where we observe synthetic departure issued late and/ or syntheic arrival
 issued much early for many adhoc flights. This manifests as tracks beginning
 or ending several miles from the origin or destination.
 
