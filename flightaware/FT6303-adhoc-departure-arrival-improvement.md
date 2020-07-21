@@ -4,76 +4,71 @@ Improve synthetic departure and arrival accuracy for adhoc flights.
 
 # Motivation
 
-Why are we doing this? What use cases does it support? What is the expected
-outcome?
+Recent policy to make adhoc flights visible on our website has revealed an      
+issue that we have long been suspected.  There are recurring instances where we
+issue synthtic departure late and/or arrival early for many adhoc flights. This
+manifests as tracks beginning or ending several miles from the origin or 
+destination.
 
-Please focus on explaining the motivation so that if this RFC is not accepted,
-the motivation could be used to develop alternative solutions. In other words,
-enumerate the constraints you are trying to solve without coupling them too
-closely to the solution you have in mind.
-
-Recent policy to make adhoc flights visible on our website has revealed an 
-issue that we have long been suspected.  There are recurring instances where
-we issue synthtic departure late and/or arrival early for many adhoc flights.
 Prime examples of these problems are seen here, here, here, and here.  
-
 
 # Proposed Solutions
 
-The following solutions to address late departure and early arrival issues are 
-broken into two phases, outlined as follows:
-* Phase 1 - short-term fixes to be implemented right away
+The following proposed solutions to address late departure and early arrival 
+issues are broken into two phases as follows:
+* Phase 1
     * Improving groundspeed handling
     * Improving altitude handling
     * Encapulating airground determination logics
-* Phase 2: long-term fixes
+* Phase 2
     * Processing ground-positiona and position messages from surfacestream feed
     * Persisting rejecting position message for later evaluation
 
 
-## Phase 1:
+## Phase 1
 
 ### Improving Groundspeed Handling
 
-#### Include groundspeed check in `refine_airground_switch`
-Existing logics in `refined_airground_switch` to determine the airground
-status of a flight:
+#### Modifications to `refine_airground_switch` proc
+We will include groundspeed check similarly to that in `tita-disriminator` in 
+the `refine-airground-switch`, in addition to the existing checks using 
+distance and elevation difference between the airport and the position being
+processed.
+
+Current logics to determine airground status of a position in the proc 
+`refined_airground_switch` are:
 https://github.flightaware.com/flightaware/feedstream_server/blob/e98c4a7c94c1a1e6449a645d3806b2ec247f1e8b/feed_interpreter/package/process_position_for_flightplan_forks.tcl#L1732-L1774
 
-We update or set the airground field to G (ground) if the following two conditions 
-are met. Otherwise, leave airground field in position as is.  
-1. elevation difference <= 400 or 500 *, and
-2. distance to airport <= 3 miles
+We update or set the airground field to G (ground) if the following rules are
+met. Otherwise, leave airground field in position message as is.  
+1. elevation difference between position and airport <= 400* or 500*, and
+2. distance between position and airport <= 3 miles
+
+*Notes: dependent on the groundspeed or true airspeed, the maximum elevation 
+difference is 400ft if groundspeedd <= 100knots or true airspeed < 50knots; 
+otherwise, it is set at 500ft.
 
 A new rule using groundspeed and its source is added:
-3. `gs_src`='A' and `gs`<=100 knots and `adsb_category` all except 'A7'?
-4. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` in ('A7')
+1. `gs_src`='A' and `gs`<=100 knots and `adsb_category` all except 'A7'?
+2. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` in ('A7')
 
-
-We will include groundspeed check similarly to that in `tita-disriminator` in the 
-`refine-airground-switch` in addition to the existing distance and altitude delta.
-The airground determination based on groundspeed is more granular with the inclusion
-of the two fields, `gs_src` and `adsb_category`.  The airground breakpoint threshold
-are set appropriate based on the data source and aircraft type included in the position
-message.
 
 #### Improving Altitude Handling
-Based on analysis the accurracy of `alt_gnss`, the exisitng rules in altitude check
-are replaced with an computed, adjusted altitude meassure, called `alt_pressured`, 
-with the `alt_src` field.  Existing geodesy library can serve as good codebase to use
-for computing good altitude gnss correction.
+1. The current elevation difference threshold of 400f or 500ft (see above) is
+high. We should consider decreasing this threshold to a more reasonable range 
+like between 100-200ft instead.  
 
-We will also replace the existing altitude threshold of 500ft difference between the 
-position and the airport with a lower threshold as well.  The initial value to considered 
-is 100-200ft.
+2. Replace existing check based on `alt` value with `alt_gnss` or corrected 
+altitude adjusted for pressure.  We can use the existing geodesy library from 
+ADS-B team as reference on how to compute correction for `alt_gnss` values.
 
-Analysis of the reliablity of the altitude from different data sources also suggests
-we reject altitude from certain feed such as MLAT.  
+3. Exclude altitude values from unreliable data sources such as MLAT.
+  
 
 #### Encapulating airground determination logics
 
 Currently for position messages, we evaluate the airground status of the flight
-at two main junctions:
+at two main code paths:
 * at the start when we match the position to a flight in the `tita-discrimator` proc, and 
 * at the point when we are deciding to issue synthetic departure or arrival in the
 `refine-airground-switch` proc.
@@ -84,11 +79,11 @@ the distance and altitude difference between the position current location and t
 airport closest to that position.  These two methods sometimes deliver conflicting 
 airground status leading to the late departure/early arrival issue that we observe.  
 
-The solution includes introducing new module(s) for encapsulating the all existing
-and new rules for determining current airground status of a flight.  The allows 
-rigous testing as well as providing a centralized location for this.  This
-is to ensure consistent evaluation of the current airground
-status of a flight throughout the hyperfeed codebase.
+We need to encapsulate these rules into a specific module whose purpose is to
+compute airground flag for a position.  This serves as a single place where all
+the rules reside for ease of unit testing as well as maintaining the rules.  This
+ensures consistent evaluation of the current airground status for a position
+throughout the hyperfeed codebase.
 
 ## Phase 2:
 
