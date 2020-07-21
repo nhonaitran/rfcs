@@ -4,7 +4,7 @@ Improve synthetic departure and arrival accuracy for adhoc flights.
 
 # Motivation
 
-Recent policy to make adhoc flights visible on our website has revealed an      
+Recent policy to make adhoc flights visible on our flight tracking webpage has revealed an      
 issue that we have long been suspected.  There are recurring instances where we
 issue synthtic departure late and/or arrival early for many adhoc flights. This
 manifests as tracks beginning or ending several miles from the origin or 
@@ -19,6 +19,7 @@ issues are broken into two phases as follows:
 * Phase 1
     * Improving groundspeed handling
     * Improving altitude handling
+    * Improving airport determination
     * Encapulating airground determination logics
 * Phase 2
     * Processing ground-positiona and position messages from surfacestream feed
@@ -29,14 +30,15 @@ issues are broken into two phases as follows:
 
 ### Improving Groundspeed Handling
 
-#### Modifications to `refine_airground_switch` proc
-We will include groundspeed check similarly to that in `tita-disriminator` in 
-the `refine-airground-switch`, in addition to the existing checks using 
-distance and elevation difference between the airport and the position being
-processed.
+1. Add sanity check for rejecting obvious invalid values
+
+2. Add sanity check for rejecting groundspeed from non-reliable sources
+
+3. Improve airground determination with groundspeed information in addition
+to existing distance and difference in elevation checks.  
 
 Current logics to determine airground status of a position in the proc 
-`refined_airground_switch` are:
+`refine_airground_switch` are:
 https://github.flightaware.com/flightaware/feedstream_server/blob/e98c4a7c94c1a1e6449a645d3806b2ec247f1e8b/feed_interpreter/package/process_position_for_flightplan_forks.tcl#L1732-L1774
 
 We update or set the airground field to G (ground) if the following rules are
@@ -48,42 +50,62 @@ met. Otherwise, leave airground field in position message as is.
 difference is 400ft if groundspeedd <= 100knots or true airspeed < 50knots; 
 otherwise, it is set at 500ft.
 
-A new rule using groundspeed and its source is added:
-1. `gs_src`='A' and `gs`<=100 knots and `adsb_category` all except 'A7'?
-2. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` in ('A7')
+Similar to `tita-discriminator`, we should modify `refine_airground_switch` 
+proc to include the following new rules for setting airground flag to Ground:
+1. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'A7' (helicopters)
+2. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'B1-B6' (gliders, parachutes, ultralight, etc)
+3. `gs_src`='A' and `gs`<=100 knots and `adsb_category` not ('A7', 'B1-B7') 
 
 
 #### Improving Altitude Handling
-1. The current elevation difference threshold of 400f or 500ft (see above) is
+1. Add sanity check for rejecting of obvious invalid altitude values. 
+
+2. Add sanity check for rejecting altitude from unreliable data sources, 
+such as MLAT.
+
+3. The current elevation difference threshold of 400f or 500ft (see above) is
 high. We should consider decreasing this threshold to a more reasonable range 
 like between 100-200ft instead.  
 
-2. Replace existing check based on `alt` value with `alt_gnss` or corrected 
+4. Replace existing check based on `alt` value with `alt_gnss` or corrected 
 altitude adjusted for pressure.  We can use the existing geodesy library from 
 ADS-B team as reference on how to compute correction for `alt_gnss` values.
 
-3. Exclude altitude values from unreliable data sources such as MLAT.
-  
+5. Fix bug(s) in hyperfeed that produce/emit invalid altitude values in 
+`controlstream` but do not originate from `adsbparsedMux`. 
+
+#### Improving Distance Calculation
+The distance calculation in `refine_airground_switch` requires availability
+of the origin and destination airport.  Currently, the airport information 
+available in surfacestream is not persisted at all after being processed in 
+hyperfeed for flight events.
+
+We should be save airport data in `flightplan` data for later evaluation of 
+airground status without having to invoke the expensive 
+`feedstream::find_nearest_airport` proc.
+
 
 #### Encapulating airground determination logics
 
 Currently for position messages, we evaluate the airground status of the flight
 at two main code paths:
-* at the start when we match the position to a flight in the `tita-discrimator` proc, and 
+* at the start when we match the position to a flight in the `tita-discrimator` 
+proc, and 
 * at the point when we are deciding to issue synthetic departure or arrival in the
 `refine-airground-switch` proc.
 
-In `tita-discriminator`, we use ground speed and altitude to determine the airground
-status.  While in `refine-airground-switch`, we make the same determination based on
-the distance and altitude difference between the position current location and the
-airport closest to that position.  These two methods sometimes deliver conflicting 
-airground status leading to the late departure/early arrival issue that we observe.  
+In `tita-discriminator`, we use ground speed and altitude to determine the 
+airground status.  While in `refine-airground-switch`, we make the same 
+determination based on the distance and altitude difference between the position
+current location and the airport closest to that position.  These two methods
+sometimes deliver conflicting airground status leading to the late departure/
+early arrival issue that we observe.  
 
 We need to encapsulate these rules into a specific module whose purpose is to
-compute airground flag for a position.  This serves as a single place where all
-the rules reside for ease of unit testing as well as maintaining the rules.  This
-ensures consistent evaluation of the current airground status for a position
-throughout the hyperfeed codebase.
+compute airground flag for a position.  This serves as a centralized location 
+where all of the identified rules reside for ease of unit testing as well as 
+maintainance the rules.  This ensures consistent evaluation of the airground
+status for a position throughout the hyperfeed codebase.
 
 ## Phase 2:
 
