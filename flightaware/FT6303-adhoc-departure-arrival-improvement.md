@@ -31,17 +31,12 @@ issues are broken into two phases as follows:
 
 ### Improving Groundspeed Handling
 
-
-1. Add sanity check for rejecting obvious invalid values
-
-2. Add sanity check for rejecting groundspeed from non-reliable sources
-
-3. Improve airground determination with groundspeed information in addition
-to existing distance and difference in elevation checks.  
-
+#### Current logic:
 Current logics to determine airground status of a position in the proc 
 `refine_airground_switch` are:
+--
 https://github.flightaware.com/flightaware/feedstream_server/blob/e98c4a7c94c1a1e6449a645d3806b2ec247f1e8b/feed_interpreter/package/process_position_for_flightplan_forks.tcl#L1732-L1774
+--
 
 We update or set the airground field to G (ground) if the following rules are
 met. Otherwise, leave airground field in position message as is.  
@@ -52,14 +47,24 @@ met. Otherwise, leave airground field in position message as is.
 difference is 400ft if groundspeedd <= 100knots or true airspeed < 50knots; 
 otherwise, it is set at 500ft.
 
-Similar to `tita-discriminator`, we should modify `refine_airground_switch` 
-proc to include the following new rules for setting airground flag to Ground:
-1. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'A7' (helicopters)
-2. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'B1-B6' (gliders, parachutes, ultralight, etc)
-3. `gs_src`='A' and `gs`<=100 knots and `adsb_category` not ('A7', 'B1-B7')
+#### Revised Logic:
+
+1. Add sanity check for rejecting obvious invalid values
+
+2. Add sanity check for rejecting groundspeed from non-reliable sources
+
+3. Improve airground determination with groundspeed information in addition
+to existing distance and difference in elevation checks.
+    3.1. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'A7' (helicopters)
+    3.2. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'B1-B6' (gliders, parachutes, ultralight, etc)
+    3.3 `gs_src`='A' and `gs`<=100 knots and `adsb_category` not ('A7', 'B1-B7')
 
 
 ### Improving Altitude Handling
+
+The followings revised logics for better handling altitude values should be
+updated throughout hyperfeed.
+
 1. Add sanity check for rejecting of obvious invalid altitude values. 
 
 2. Add sanity check for rejecting altitude from unreliable data sources, 
@@ -73,8 +78,9 @@ like between 100-200ft instead.
 altitude adjusted for pressure.  We can use the existing geodesy library from 
 ADS-B team as reference on how to compute correction for `alt_gnss` values.
 
-5. Fix bug(s) in hyperfeed that produce/emit invalid altitude values in 
-`controlstream` but do not originate from `adsbparsedMux`. 
+We also need to include fix bug(s) in hyperfeed that produce/emit invalid 
+altitude values in `controlstream` but do not originate from `adsbparsedMux`. 
+
 
 #### Improving Distance Calculation with Airport Data from Surface events
 The distance calculation in `refine_airground_switch` requires availability
