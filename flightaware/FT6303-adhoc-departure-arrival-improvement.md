@@ -23,13 +23,14 @@ issues are broken into two phases as follows:
     * Improving airport determination
     * Encapulating airground determination logics
 * Phase 2
-    * Processing ground-positiona and position messages from surfacestream feed
+    * Processing ground-position and position messages from surfacestream feed
     * Persisting rejecting position message for later evaluation
 
 
 ## Phase 1
 
 ### Improving Groundspeed Handling
+
 
 1. Add sanity check for rejecting obvious invalid values
 
@@ -55,10 +56,10 @@ Similar to `tita-discriminator`, we should modify `refine_airground_switch`
 proc to include the following new rules for setting airground flag to Ground:
 1. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'A7' (helicopters)
 2. `gs_src`='A' and `gs`<= 50 knots and `adsb_category` = 'B1-B6' (gliders, parachutes, ultralight, etc)
-3. `gs_src`='A' and `gs`<=100 knots and `adsb_category` not ('A7', 'B1-B7') 
+3. `gs_src`='A' and `gs`<=100 knots and `adsb_category` not ('A7', 'B1-B7')
 
 
-#### Improving Altitude Handling
+### Improving Altitude Handling
 1. Add sanity check for rejecting of obvious invalid altitude values. 
 
 2. Add sanity check for rejecting altitude from unreliable data sources, 
@@ -75,7 +76,7 @@ ADS-B team as reference on how to compute correction for `alt_gnss` values.
 5. Fix bug(s) in hyperfeed that produce/emit invalid altitude values in 
 `controlstream` but do not originate from `adsbparsedMux`. 
 
-#### Improving Distance Calculation
+#### Improving Distance Calculation with Airport Data from Surface events
 The distance calculation in `refine_airground_switch` requires availability
 of the origin and destination airport.  Currently, the airport information 
 available in surfacestream is not persisted at all after being processed in 
@@ -108,6 +109,11 @@ where all of the identified rules reside for ease of unit testing as well as
 maintainance the rules.  This ensures consistent evaluation of the airground
 status for a position throughout the hyperfeed codebase.
 
+This fix would eliminate the bug seen in `tita-descriminator` where different
+thresholds (a configurable value vs a literal value) being used for airground 
+determination for held vs. non-held positions where the thresholds should have
+been the same, as reported in [FT-5752](https://flightaware.atlassian.net/browse/FT-5752)
+
 ## Phase 2:
 
 #### Process surface movement positions in addition to flight events
@@ -120,15 +126,13 @@ contain useful data such as airport information that could be used as origin or
 destination, groundspeed, altitude, lat/lon coordinates that could hyperfeed 
 could use just like a position message from ADS-B or Aireon feeds. 
 
-The big drawback of this is it could introduce an big increase in data that
-hyperfeed would need to process.  We would need evaluate MMHF performance if we
-want to pursue this route.
+The big drawback of this is it could increase the volume of position messages
+that hyperfeed needs to process by many folds, which might have big performance
+impact on MMHF if we want to pursue this route.
 
 #### Persistence of positions for later evaluation
 
-Analysis of the flights mentioned above as use case revealed that MMHF throws away
-positions once it determines that an adhoc flightplan cannot be created due to 
-current airground status.  
-
-Instead of throwing these messages way, MMHF should store these positions to perhaps
+Analysis of the reported flights mentioned above revealed that MMHF throws away
+positions once it determines that an adhoc flightplan cannot be created.  
+Instead of throwing these messages away, MMHF should store these positions to perhaps
 build a altitude/speed profile to aid in the determination of airground status. 
